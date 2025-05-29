@@ -44,7 +44,7 @@ class Config:
     SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY')
     
     # External URL for email links
-    EXTERNAL_URL = os.getenv('EXTERNAL_URL', 'http://127.0.0.1:5000')
+    EXTERNAL_URL = os.getenv('EXTERNAL_URL', 'https://securevideo-app.onrender.com')
     
     # File storage paths
     UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'static/uploads')
