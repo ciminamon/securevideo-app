@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Decrypt Video</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+    <!-- Navbar -->
+    <nav class="bg-white shadow">
+        <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+            <h1 class="text-2xl font-bold text-blue-600">SecureVideo</h1>
+            <div class="space-x-4">
+                <a href="/dashboard" class="text-gray-700 hover:text-blue-600 px-4 py-2 rounded {% if request.path == '/dashboard' %}bg-blue-100 text-blue-600{% endif %}">Encrypt</a>
+                <a href="/decrypt" class="text-gray-700 hover:text-blue-600 px-4 py-2 rounded {% if request.path == '/decrypt' %}bg-blue-100 text-blue-600{% endif %}">Decrypt</a>
+                <a href="/performance" class="text-gray-700 hover:text-blue-600 px-4 py-2 rounded {% if request.path == '/performance' %}bg-blue-100 text-blue-600{% endif %}">Performance</a>
+                <a href="/logout" class="text-gray-700 hover:text-blue-600 px-4 py-2 rounded">Log Out</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto p-8">
+        <h2 class="text-3xl font-bold text-blue-700 mb-6">Decrypt Your Video</h2>
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="mb-4 p-4 rounded text-white
+                        {% if category == 'success' %}bg-green-500{% elif category == 'danger' %}bg-red-500{% endif %}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <div class="mb-6">
+                <h3 class="text-lg font-semibold text-gray-700 mb-2">How to Decrypt Your Video:</h3>
+                <ol class="list-decimal list-inside space-y-2 text-gray-600">
+                    <li>Enter your private key that was shown when you encrypted the video</li>
+                    <li>Upload your encrypted video file</li>
+                    <li>Click "Decrypt Video" to recover your original video</li>
+                </ol>
+            </div>
+
+            <form method="POST" enctype="multipart/form-data" class="space-y-6">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <!-- Private Key Input -->
+                <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <label class="block text-gray-700 font-medium mb-2">
+                        Step 1: Enter Private Key
+                    </label>
+                    <input type="text" name="private_key" required
+                           class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                           placeholder="Enter your private key">
+                    <p class="text-sm text-gray-500 mt-1">This is the key that was shown to you when you encrypted the video</p>
+                </div>
+
+                <!-- Encrypted Video Upload -->
+                <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <label class="block text-gray-700 font-medium mb-2">
+                        Step 2: Upload Encrypted Video
+                    </label>
+                    <input type="file" name="encrypted_video" accept="video/*" required
+                           class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <p class="text-sm text-gray-500 mt-1">Select the encrypted video file you want to decrypt</p>
+                </div>
+
+                <button type="submit" class="w-full bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition duration-200 flex items-center justify-center space-x-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" />
+                    </svg>
+                    <span>Decrypt Video</span>
+                </button>
+            </form>
+        </div>
+
+        {% if show_verify_button %}
+        <div class="mt-8 bg-green-50 border border-green-200 rounded-lg p-6">
+            <h3 class="text-lg font-semibold text-green-700 mb-4">Decryption Successful!</h3>
+            <p class="text-green-600 mb-4">Your video has been successfully decrypted. Please verify its integrity before downloading.</p>
+            <form method="GET" action="{{ url_for('verify_integrity') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="inline-flex items-center bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition duration-200">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M16.707 10.293a1 1 0 00-1.414 0L11 14.586V3a1 1 0 10-2 0v11.586l-4.293-4.293a1 1 0 00-1.414 1.414l6 6a1 1 0 001.414 0l6-6a1 1 0 000-1.414z" clip-rule="evenodd" />
+                    </svg>
+                    Verify File Integrity
+                </button>
+            </form>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Warning Modal for Mobile Devices -->
+    <script>
+        if (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+            document.addEventListener('DOMContentLoaded', function() {
+                const warning = document.createElement('div');
+                warning.className = 'bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6';
+                warning.innerHTML = `
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+                            </svg>
+                        </div>
+                        <div class="ml-3">
+                            <p class="text-sm text-yellow-700">
+                                You're on a mobile device. Make sure you have downloaded both the encrypted video and key bundle before proceeding with decryption.
+                            </p>
+                        </div>
+                    </div>
+                `;
+                document.querySelector('form').insertBefore(warning, document.querySelector('form').firstChild);
+            });
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify File Integrity - Secure Video Encryption System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 font-sans leading-normal tracking-normal">
+    <!-- Navbar -->
+    <nav class="bg-white shadow">
+        <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+            <h1 class="text-2xl font-bold text-blue-600">SecureVideo</h1>
+            <div class="space-x-4">
+                <a href="/dashboard" class="text-gray-700 hover:text-blue-600 px-4 py-2 rounded {% if request.path == '/dashboard' %}bg-blue-100 text-blue-600{% endif %}">Encrypt</a>
+                <a href="/decrypt" class="text-gray-700 hover:text-blue-600 px-4 py-2 rounded {% if request.path == '/decrypt' %}bg-blue-100 text-blue-600{% endif %}">Decrypt</a>
+                <a href="/performance" class="text-gray-700 hover:text-blue-600 px-4 py-2 rounded {% if request.path == '/performance' %}bg-blue-100 text-blue-600{% endif %}">Performance</a>
+                <a href="/logout" class="text-gray-700 hover:text-blue-600 px-4 py-2 rounded">Log Out</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto p-8">
+        <h2 class="text-3xl font-bold text-blue-700 mb-6">Verify File Integrity</h2>
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="mb-4 p-4 rounded text-white
+                        {% if category == 'success' %}bg-green-500{% elif category == 'danger' %}bg-red-500{% endif %}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- Upload Form -->
+        <div class="bg-white p-6 rounded shadow mb-8">
+            <p class="mb-4 text-blue-700">
+                <strong>Note:</strong> This page verifies the integrity of your decrypted video file. You can only access it after decrypting a file. If verification is successful, you can securely download your decrypted video.
+            </p>
+        </div>
+
+        <!-- Verification Result -->
+        {% if verification_result %}
+        <div class="bg-white p-6 rounded shadow">
+            <h3 class="text-xl font-semibold text-blue-600 mb-4">Verification Result</h3>
+            <div class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="p-4 border rounded">
+                        <p class="font-semibold text-gray-700">Original Hash:</p>
+                        <p class="font-mono text-sm break-all">{{ verification_result.original_hash }}</p>
+                    </div>
+                    <div class="p-4 border rounded">
+                        <p class="font-semibold text-gray-700">Calculated Hash:</p>
+                        <p class="font-mono text-sm break-all">{{ verification_result.calculated_hash }}</p>
+                    </div>
+                </div>
+                <div class="mt-4 p-4 rounded text-center {% if verification_result.match %}bg-green-100{% else %}bg-red-100{% endif %}">
+                    {% if verification_result.match %}
+                        <p class="text-green-700 font-semibold">✓ File integrity verified! The file has not been tampered with.</p>
+                        {% if show_download %}
+                        <form method="GET" action="{{ url_for('download_decrypted_temp') }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="mt-4 bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700 transition">Download Decrypted File</button>
+                        </form>
+                        {% endif %}
+                    {% else %}
+                        <p class="text-red-700 font-semibold">⚠ Warning: File integrity check failed! The file may have been modified.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html> 

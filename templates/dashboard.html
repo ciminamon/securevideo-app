@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Secure Video Encryption System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 font-sans leading-normal tracking-normal">
+
+    <!-- Navbar -->
+    <nav class="bg-white shadow">
+        <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+            <h1 class="text-2xl font-bold text-blue-600">SecureVideo</h1>
+            <div class="space-x-4">
+                <a href="/dashboard" class="text-gray-700 hover:text-blue-600 px-4 py-2 rounded {% if request.path == '/dashboard' %}bg-blue-100 text-blue-600{% endif %}">Encrypt</a>
+                <a href="/decrypt" class="text-gray-700 hover:text-blue-600 px-4 py-2 rounded {% if request.path == '/decrypt' %}bg-blue-100 text-blue-600{% endif %}">Decrypt</a>
+                <a href="/performance" class="text-gray-700 hover:text-blue-600 px-4 py-2 rounded {% if request.path == '/performance' %}bg-blue-100 text-blue-600{% endif %}">Performance</a>
+                <a href="/logout" class="text-gray-700 hover:text-blue-600 px-4 py-2 rounded">Log Out</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Dashboard -->
+    <div class="container mx-auto px-4 py-10">
+        <h2 class="text-3xl font-bold text-gray-800 mb-6">Welcome, {{ user_name }}!</h2>
+
+        <!-- Flash messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    {% if category == 'success' %}
+                        <div class="mb-4 p-4 rounded text-white bg-green-500">{{ message }}</div>
+                    {% elif category == 'info' %}
+                        <div class="mb-4 p-4 rounded text-white bg-blue-500">{{ message }}</div>
+                    {% elif category == 'danger' %}
+                        <div class="mb-4 p-4 rounded text-white bg-red-500">{{ message }}</div>
+                    {% else %}
+                        <div class="mb-4 p-4 rounded text-white bg-gray-500">{{ message }}</div>
+                    {% endif %}
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        {% if private_key %}
+        <div class="mb-4 p-4 bg-yellow-100 text-yellow-800 rounded flex items-center">
+          <span class="mr-2 font-semibold">Download your private key and save it securely. You will need it to decrypt your video.</span>
+          <button type="button" onclick="downloadKey()" class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 ml-2">Download Key</button>
+        </div>
+        <script>
+        function downloadKey() {
+          const key = "{{ private_key }}";
+          const blob = new Blob([key], { type: 'text/plain' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'private_key.txt';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }
+        </script>
+        {% endif %}
+
+        <!-- Upload Section -->
+        <div class="bg-white p-6 rounded shadow mb-8">
+            <h3 class="text-2xl font-semibold text-blue-600 mb-4">Upload Video for Encryption</h3>
+            <form action="/upload" method="POST" enctype="multipart/form-data" class="space-y-4">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                    <label class="block text-gray-700 font-medium mb-2">Select Video File</label>
+                    <input type="file" name="video_file" accept="video/*" required 
+                           class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <p class="text-sm text-gray-500 mt-1">Choose the video file you want to encrypt securely</p>
+                </div>
+                
+                <button type="submit" class="w-full bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition duration-200 flex items-center justify-center space-x-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clip-rule="evenodd" />
+                    </svg>
+                    <span>Upload and Encrypt</span>
+                </button>
+            </form>
+        </div>
+        
+
+        <!-- Uploaded Videos Table -->
+        <div class="bg-white p-6 rounded shadow">
+            <h3 class="text-2xl font-semibold text-blue-600 mb-4">Your Encrypted Videos</h3>
+            <table class="min-w-full table-auto border-collapse">
+                <thead>
+                    <tr class="bg-gray-200 text-gray-700">
+                        <th class="px-4 py-2 border">#</th>
+                        <th class="px-4 py-2 border">File Name</th>
+                        <th class="px-4 py-2 border">Status</th>
+                        <th class="px-4 py-2 border">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for video in videos %}
+                    <tr class="text-center">
+                        <td class="px-4 py-2 border">{{ loop.index }}</td>
+                        <td class="px-4 py-2 border">{{ video[1] }}</td> <!-- original_filename -->
+                        <td class="px-4 py-2 border">
+                            {% if video[5] == 'encrypted' %}
+                                <span class="text-green-600 font-bold">Encrypted</span>
+                            {% elif video[5] == 'failed' %}
+                                <span class="text-red-600 font-bold">Encryption Failed</span>
+                            {% else %}
+                                <span class="text-yellow-600 font-bold">Processing</span>
+                            {% endif %}
+                        </td>
+                        
+                        <td class="px-4 py-2 border text-center">
+                            {% if video[5] == 'encrypted' %}
+                                <div class="flex justify-center space-x-2">
+                                    <button onclick="openPopup('{{ video[0] }}')" class="flex items-center bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-700 transition duration-150 focus:outline-none">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M16 12l-4-4-4 4m4-4v12" /></svg>
+                                    Share
+                                    </button>
+                                    <a href="{{ url_for('download_file', filename=video[2]) }}" class="flex items-center bg-green-600 text-white px-3 py-1 rounded-lg hover:bg-green-700 transition duration-150 focus:outline-none">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M16 12l-4-4-4 4m4-4v12" /></svg>
+                                    Download
+                                    </a>
+                                  </div>
+                            {% else %}
+                                <span class="text-red-600 italic">Unavailable</span>
+                            {% endif %}
+                        </td>
+                        
+                        
+                    </tr>
+                    {% else %}
+                    <tr class="text-center">
+                        <td colspan="4" class="px-4 py-2 border text-gray-500">No encrypted videos uploaded yet.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>                
+            </table>
+        </div>
+    </div>
+
+    <!-- Email Share Popup Modal -->
+    <div id="popup" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white p-6 rounded shadow-lg w-full max-w-md">
+            <h2 class="text-xl font-semibold mb-4 text-blue-600">Share Encrypted Video</h2>
+            <form method="POST" id="share-form" class="space-y-4" onsubmit="return validateShareForm()">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div>
+                    <label class="block text-gray-700 mb-1">Recipient Email</label>
+                    <div class="email-group">
+                        <input type="email" name="recipient_email" id="recipient_email" required
+                            autocomplete="off"
+                            class="email-input w-full px-4 py-2 border rounded focus:outline-none"
+                        placeholder="recipient@example.com">
+                        <span class="email-icon" id="recipient-email-icon"></span>
+                    </div>
+                    <div class="email-error" id="recipient-email-error">Please enter a valid email address</div>
+                </div>
+                <div class="flex justify-end space-x-2">
+                    <button type="button" onclick="closePopup()" class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">Cancel</button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Send</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <style>
+        .email-group { position: relative; }
+        .email-input { transition: border 0.3s; }
+        .email-input.valid { border: 2px solid #10B981 !important; }
+        .email-input.invalid { border: 2px solid #EF4444 !important; }
+        .email-icon {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 1.2em;
+            pointer-events: none;
+        }
+        .email-icon.valid { color: #10B981; }
+        .email-icon.invalid { color: #EF4444; }
+        .email-error {
+            color: #EF4444;
+            font-size: 0.95em;
+            margin-top: 2px;
+            margin-left: 2px;
+            display: none;
+        }
+        .email-error.active { display: block; }
+    </style>
+    <script>
+        // Real-time email validation for share modal
+        const recipientEmailInput = document.getElementById('recipient_email');
+        const recipientEmailIcon = document.getElementById('recipient-email-icon');
+        const recipientEmailError = document.getElementById('recipient-email-error');
+        const recipientEmailPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+        recipientEmailInput.addEventListener('input', function() {
+            const value = this.value;
+            if (value.length === 0) {
+                this.classList.remove('valid', 'invalid');
+                recipientEmailIcon.textContent = '';
+                recipientEmailError.classList.remove('active');
+                return;
+            }
+            if (recipientEmailPattern.test(value)) {
+                this.classList.add('valid');
+                this.classList.remove('invalid');
+                recipientEmailIcon.textContent = '✓';
+                recipientEmailIcon.className = 'email-icon valid';
+                recipientEmailError.classList.remove('active');
+            } else {
+                this.classList.add('invalid');
+                this.classList.remove('valid');
+                recipientEmailIcon.textContent = '✗';
+                recipientEmailIcon.className = 'email-icon invalid';
+                recipientEmailError.classList.add('active');
+            }
+        });
+        function validateShareForm() {
+            const value = recipientEmailInput.value;
+            if (!recipientEmailPattern.test(value)) {
+                recipientEmailError.classList.add('active');
+                recipientEmailInput.classList.add('invalid');
+                recipientEmailInput.classList.remove('valid');
+                recipientEmailIcon.textContent = '✗';
+                recipientEmailIcon.className = 'email-icon invalid';
+                return false;
+            }
+            return true;
+        }
+    </script>
+    <script>
+    function toggleKeyVisibility() {
+      const keyField = document.getElementById('privateKeyField');
+      const eyeOpen = document.getElementById('eyeOpen');
+      const eyeSlash = document.getElementById('eyeSlash');
+      if (keyField.type === 'password') {
+        keyField.type = 'text';
+        eyeOpen.classList.add('hidden');
+        eyeSlash.classList.remove('hidden');
+      } else {
+        keyField.type = 'password';
+        eyeOpen.classList.remove('hidden');
+        eyeSlash.classList.add('hidden');
+      }
+    }
+    </script>
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>

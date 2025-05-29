@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - Secure Video Encryption System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .requirement {
+            transition: all 0.3s ease;
+        }
+        .requirement.met {
+            color: #10B981;
+        }
+        .requirement.unmet {
+            color: #EF4444;
+        }
+        .requirement .icon {
+            margin-right: 8px;
+            font-weight: bold;
+        }
+        /* Email validation styles */
+        .email-group {
+            position: relative;
+        }
+        .email-input {
+            transition: border 0.3s;
+        }
+        .email-input.valid {
+            border: 2px solid #10B981 !important;
+        }
+        .email-input.invalid {
+            border: 2px solid #EF4444 !important;
+        }
+        .email-icon {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 1.2em;
+            pointer-events: none;
+        }
+        .email-icon.valid {
+            color: #10B981;
+        }
+        .email-icon.invalid {
+            color: #EF4444;
+        }
+        .email-error {
+            color: #EF4444;
+            font-size: 0.95em;
+            margin-top: 2px;
+            margin-left: 2px;
+            display: none;
+        }
+        .email-error.active {
+            display: block;
+        }
+        /* Password validation styles */
+        .password-group {
+            position: relative;
+        }
+        .password-input {
+            transition: border 0.3s;
+        }
+        .password-input.valid {
+            border: 2px solid #10B981 !important;
+        }
+        .password-input.invalid {
+            border: 2px solid #EF4444 !important;
+        }
+        .password-icon {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 1.2em;
+            pointer-events: none;
+        }
+        .password-icon.valid {
+            color: #10B981;
+        }
+        .password-icon.invalid {
+            color: #EF4444;
+        }
+        .password-error {
+            color: #EF4444;
+            font-size: 0.95em;
+            margin-top: 2px;
+            margin-left: 2px;
+            display: none;
+        }
+        .password-error.active {
+            display: block;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans leading-normal tracking-normal">
+
+    <div class="flex items-center justify-center h-screen">
+        <div class="bg-white p-8 rounded shadow-md w-full max-w-md">
+            <h2 class="text-2xl font-bold text-center text-blue-600 mb-6">Create an Account</h2>
+
+            <!-- Flash messages -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="mb-4 p-4 rounded text-white
+                            {% if category == 'success' %}bg-green-500{% elif category == 'danger' %}bg-red-500{% endif %}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <form action="/register" method="POST" class="space-y-4" onsubmit="return validateForm()">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div>
+                    <label class="block text-gray-700">Full Name</label>
+                    <input type="text" name="name" required class="w-full px-4 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label class="block text-gray-700">Email</label>
+                    <div class="email-group">
+                        <input type="email" name="email" id="email" required
+                            autocomplete="off"
+                            class="email-input w-full px-4 py-2 border rounded focus:outline-none">
+                        <span class="email-icon" id="email-icon"></span>
+                    </div>
+                    <div class="email-error" id="email-error">Please enter a valid email address</div>
+                </div>
+                <div>
+                    <label class="block text-gray-700">Password</label>
+                    <div class="password-group">
+                        <input type="password" name="password" id="password" required
+                            autocomplete="off"
+                            class="password-input w-full px-4 py-2 border rounded focus:outline-none">
+                        <span class="password-icon" id="password-icon"></span>
+                    </div>
+                    <div class="password-error" id="password-error">Please ensure your password meets all requirements.</div>
+                    <!-- Password Requirements -->
+                    <div class="mt-2 space-y-1 text-sm">
+                        <div class="requirement unmet" id="length">
+                            <span class="icon">&#9679;</span>At least 8 characters
+                        </div>
+                        <div class="requirement unmet" id="uppercase">
+                            <span class="icon">&#9679;</span>One uppercase letter
+                        </div>
+                        <div class="requirement unmet" id="lowercase">
+                            <span class="icon">&#9679;</span>One lowercase letter
+                        </div>
+                        <div class="requirement unmet" id="number">
+                            <span class="icon">&#9679;</span>One number
+                        </div>
+                        <div class="requirement unmet" id="special">
+                            <span class="icon">&#9679;</span>One special character
+                        </div>
+                    </div>
+                </div>
+                <button type="submit" class="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition">Register</button>
+            </form>
+            <p class="text-center text-gray-600 mt-4">Already have an account? <a href="/login" class="text-blue-600 hover:underline">Login here</a></p>
+        </div>
+    </div>
+
+    <script>
+        // Password requirements logic
+        const password = document.getElementById('password');
+        const passwordIcon = document.getElementById('password-icon');
+        const passwordError = document.getElementById('password-error');
+        const requirements = {
+            length: { regex: /.{8,}/, element: document.getElementById('length') },
+            uppercase: { regex: /[A-Z]/, element: document.getElementById('uppercase') },
+            lowercase: { regex: /[a-z]/, element: document.getElementById('lowercase') },
+            number: { regex: /[0-9]/, element: document.getElementById('number') },
+            special: { regex: /[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>\/?]/, element: document.getElementById('special') }
+        };
+        function checkPasswordValidity(value) {
+            let allMet = true;
+            for (const [key, requirement] of Object.entries(requirements)) {
+                if (requirement.regex.test(value)) {
+                    requirement.element.classList.remove('unmet');
+                    requirement.element.classList.add('met');
+                    requirement.element.querySelector('.icon').textContent = '✓';
+                } else {
+                    requirement.element.classList.remove('met');
+                    requirement.element.classList.add('unmet');
+                    requirement.element.querySelector('.icon').textContent = '●';
+                    allMet = false;
+                }
+            }
+            return allMet;
+        }
+        password.addEventListener('input', function() {
+            const value = this.value;
+            if (value.length === 0) {
+                this.classList.remove('valid', 'invalid');
+                passwordIcon.textContent = '';
+                passwordError.classList.remove('active');
+                checkPasswordValidity(value);
+                return;
+            }
+            if (checkPasswordValidity(value)) {
+                this.classList.add('valid');
+                this.classList.remove('invalid');
+                passwordIcon.textContent = '✓';
+                passwordIcon.className = 'password-icon valid';
+                passwordError.classList.remove('active');
+            } else {
+                this.classList.add('invalid');
+                this.classList.remove('valid');
+                passwordIcon.textContent = '✗';
+                passwordIcon.className = 'password-icon invalid';
+                passwordError.classList.add('active');
+            }
+        });
+        // Email validation logic
+        const emailInput = document.getElementById('email');
+        const emailIcon = document.getElementById('email-icon');
+        const emailError = document.getElementById('email-error');
+        const emailPattern = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+        emailInput.addEventListener('input', function() {
+            const value = this.value;
+            if (value.length === 0) {
+                this.classList.remove('valid', 'invalid');
+                emailIcon.textContent = '';
+                emailError.classList.remove('active');
+                return;
+            }
+            if (emailPattern.test(value)) {
+                this.classList.add('valid');
+                this.classList.remove('invalid');
+                emailIcon.textContent = '✓';
+                emailIcon.className = 'email-icon valid';
+                emailError.classList.remove('active');
+            } else {
+                this.classList.add('invalid');
+                this.classList.remove('valid');
+                emailIcon.textContent = '✗';
+                emailIcon.className = 'email-icon invalid';
+                emailError.classList.add('active');
+            }
+        });
+        function validateForm() {
+            const passwordVal = password.value;
+            const email = emailInput.value;
+            const passwordPattern = /^(?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>\/?]).{8,}$/;
+            if (!emailPattern.test(email)) {
+                emailError.classList.add('active');
+                emailInput.classList.add('invalid');
+                emailInput.classList.remove('valid');
+                emailIcon.textContent = '✗';
+                emailIcon.className = 'email-icon invalid';
+                return false;
+            }
+            if (!passwordPattern.test(passwordVal)) {
+                passwordError.classList.add('active');
+                password.classList.add('invalid');
+                password.classList.remove('valid');
+                passwordIcon.textContent = '✗';
+                passwordIcon.className = 'password-icon invalid';
+                return false;
+            }
+            return true;
+        }
+    </script>
+</body>
+</html>

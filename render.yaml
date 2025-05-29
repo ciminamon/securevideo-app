@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: video-encryption-app
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: MAIL_USERNAME
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
+      - key: SENDGRID_API_KEY
+        sync: false
+      - key: EXTERNAL_URL
+        sync: false
+      - key: DATABASE_PATH
+        value: database/users.db
+      - key: UPLOAD_FOLDER
+        value: static/uploads
+      - key: ENCRYPTED_FOLDER
+        value: static/encrypted
+      - key: ENCRYPTED_KEY_FOLDER
+        value: static/encrypted_keys
+      - key: DECRYPTED_FOLDER
+        value: static/decrypted 
