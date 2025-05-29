@@ -23,10 +23,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from utils.security import login_required, verify_user_access, hash_password, verify_password, log_security_event, validate_file_upload, validate_email, validate_password
 from config import Config
-import qrcode
-from io import BytesIO
 import json
-import io
 from flask_mail import Mail as FlaskMail, Message
 from flask_wtf import CSRFProtect
 import bcrypt
@@ -189,14 +186,16 @@ def register():
             )
             conn.commit()
             # Send verification email
-            verify_url = f"http://127.0.0.1:5000/verify-email?token={verification_token}"
+            verify_url = f"{Config.EXTERNAL_URL}/verify-email?token={verification_token}"
             msg = Message(
                 subject="Verify your email",
                 recipients=[email],
                 html=f"""
                     <p>Thank you for registering!</p>
                     <p>Click the link below to verify your email address:</p>
-                    <a href="{verify_url}">{verify_url}</a>
+                    <a href=\"{verify_url}\">{verify_url}</a>
+                    <p>If the link is not clickable, copy and paste this URL into your browser:</p>
+                    <p>{verify_url}</p>
                 """
             )
             mail.send(msg)
@@ -532,7 +531,7 @@ def share_video(video_id):
     conn.commit()
     conn.close()
 
-    share_link = f"http://127.0.0.1:5000/secure-access/{share_token}"  # Replace with real domain later
+    share_link = f"{Config.EXTERNAL_URL}/secure-access/{share_token}"
 
     # Send via SendGrid
     message = SendGridMail(

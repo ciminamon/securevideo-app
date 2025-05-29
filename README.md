@@ -9,7 +9,6 @@ A secure web application for encrypting and sharing video files using AES and EC
 - Key management using Elliptic Curve Cryptography (ECC)
 - Secure file sharing with OTP verification
 - Performance monitoring and metrics
-- QR code generation for key bundles
 - File integrity verification
 
 ## Security Features
