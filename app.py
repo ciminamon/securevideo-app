@@ -79,6 +79,9 @@ app.config['MAIL_DEFAULT_SENDER'] = Config.MAIL_DEFAULT_SENDER
 # Initialize CSRF protection
 csrf = CSRFProtect(app)
 
+# Ensure the database directory exists before any DB connection
+os.makedirs(os.path.dirname(Config.DATABASE_PATH), exist_ok=True)
+
 # Database connection function
 def get_db():
     conn = sqlite3.connect(Config.DATABASE_PATH)
