@@ -28,7 +28,6 @@ from flask_mail import Mail as FlaskMail, Message
 from flask_wtf import CSRFProtect
 import bcrypt
 
-
 # 🔐 Import encryption modules (ensure AES.py and ECC.py are in crypto_module folder)
 from crypto_module.ECC_module.ECC import ECC
 #from crypto_module.AES_module import AES
@@ -478,19 +477,30 @@ def secure_access(token):
             except Exception as e:
                 flash("Failed to resend OTP.", "danger")
             conn.close()
-            return render_template("verify_otp.html", token=token)
+            return render_template("verify_otp.html", token=token, recipient_email=receiver_email)
         elif 'otp' in request.form:
             entered_otp = request.form['otp']
+            # Re-fetch the latest OTP and related fields from the database
+            cursor.execute('''
+                SELECT otp, otp_generated_time, otp_attempts, receiver_email, id, encrypted_filename
+                FROM videos WHERE share_token = ?
+            ''', (token,))
+            row = cursor.fetchone()
+            if not row:
+                flash("Invalid or expired link.", "danger")
+                return render_template("verify_otp.html", token=token)
+            otp_saved, otp_time, attempts, receiver_email, video_id, encrypted_filename = row
+
             if not otp_saved or not otp_time:
                 flash("OTP not generated yet.", "danger")
-                return render_template("verify_otp.html", token=token)
+                return render_template("verify_otp.html", token=token, recipient_email=receiver_email)
             otp_time_dt = datetime.strptime(otp_time, '%Y-%m-%d %H:%M:%S.%f')
             if datetime.now() > otp_time_dt + timedelta(minutes=5):
                 flash("OTP expired. Please click resend.", "danger")
-                return render_template("verify_otp.html", token=token)
+                return render_template("verify_otp.html", token=token, recipient_email=receiver_email)
             if attempts >= 5:
                 flash("Too many incorrect attempts. Try resending OTP.", "danger")
-                return render_template("verify_otp.html", token=token)
+                return render_template("verify_otp.html", token=token, recipient_email=receiver_email)
             if entered_otp == otp_saved:
                 cursor.execute("UPDATE videos SET otp_attempts = 0 WHERE id = ?", (video_id,))
                 conn.commit()
@@ -500,9 +510,9 @@ def secure_access(token):
                 cursor.execute("UPDATE videos SET otp_attempts = otp_attempts + 1 WHERE id = ?", (video_id,))
                 conn.commit()
                 flash("Invalid OTP. Please try again.", "danger")
-                return render_template("verify_otp.html", token=token)
+                return render_template("verify_otp.html", token=token, recipient_email=receiver_email)
     conn.close()
-    return render_template("verify_otp.html", token=token)
+    return render_template("verify_otp.html", token=token, recipient_email=receiver_email)
 
 @app.route('/share/<int:video_id>', methods=['POST'])
 def share_video(video_id):
@@ -556,170 +566,6 @@ def share_video(video_id):
         flash("Failed to send email. Check API key or logs.", "danger")
 
     return redirect(url_for('dashboard'))
-
-@app.route('/download-key-bundle/<filename>')
-def download_key_bundle(filename):
-    if 'user_id' not in session:
-        return jsonify({
-            'error': 'Unauthorized',
-            'message': 'Please log in to download keys'
-        }), 401
-
-    # Check if the user has access to this file
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute('''
-        SELECT id FROM videos 
-        WHERE user_id = ? AND (original_filename = ? OR encrypted_filename = ?)
-    ''', (session['user_id'], filename, f'encrypted_{filename}'))
-    video = cursor.fetchone()
-    conn.close()
-
-    if not video:
-        return jsonify({
-            'error': 'Unauthorized',
-            'message': 'You do not have access to these keys'
-        }), 403
-
-    # Check if bundle already exists in cache directory
-    cache_dir = os.path.join('static', 'key_bundles')
-    os.makedirs(cache_dir, exist_ok=True)
-    cache_file = os.path.join(cache_dir, f'key_bundle_{filename}.json')
-    
-    # If cached bundle exists and is recent (less than 1 hour old), serve it
-    if os.path.exists(cache_file):
-        file_age = datetime.now().timestamp() - os.path.getmtime(cache_file)
-        if file_age < 3600:  # 1 hour cache
-            return send_file(
-                cache_file,
-                as_attachment=True,
-                download_name=f'key_bundle_{filename}.json',
-                mimetype='application/json'
-            )
-
-    # If not cached or cache expired, generate new bundle
-    private_path = os.path.join(ENCRYPTED_KEY_FOLDER, f'private_{filename}.txt')
-    encrypted_key_path = os.path.join(ENCRYPTED_KEY_FOLDER, f'key_{filename}.txt')
-
-    if not os.path.exists(private_path) or not os.path.exists(encrypted_key_path):
-        return jsonify({
-            'error': 'Key files not found',
-            'message': 'The required key files are missing or inaccessible'
-        }), 404
-
-    try:
-        with open(private_path, 'r') as f1, open(encrypted_key_path, 'r') as f2:
-            private_key = f1.read().strip()
-            encrypted_key = f2.read().strip()
-
-        # Create bundle content with enhanced metadata
-        bundle = {
-            "filename": filename,
-            "ecc_private_key": private_key,
-            "ecc_encrypted_aes_key": encrypted_key,
-            "generated_at": datetime.now().isoformat(),
-            "generated_for": session.get('user_name', 'unknown'),
-            "instructions": "Use these keys in the decrypt page to decrypt your video file. Keep these keys secure and never share them."
-        }
-
-        # Save to cache
-        with open(cache_file, 'w') as f:
-            json.dump(bundle, f, indent=2)
-
-        log_security_event('key_bundle_download', f"User {session.get('user_name')} (ID: {session.get('user_id')}) downloaded key bundle for: {filename}")
-        return send_file(
-            cache_file,
-            as_attachment=True,
-            download_name=f'key_bundle_{filename}.json',
-            mimetype='application/json'
-        )
-
-    except Exception as e:
-        return jsonify({
-            'error': 'Bundle generation failed',
-            'message': str(e)
-        }), 500
-
-@app.route('/qr/bundle/<filename>')
-def generate_bundle_qr(filename):
-    if 'user_id' not in session:
-        return jsonify({
-            'error': 'Unauthorized',
-            'message': 'Please log in to generate QR code'
-        }), 401
-
-    try:
-        # Generate a temporary access token
-        temp_token = secrets.token_urlsafe(32)
-        
-        # Store the token with an expiration time (15 minutes)
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute('''
-            UPDATE videos 
-            SET temp_access_token = ?,
-                token_expiry = ? 
-            WHERE user_id = ? AND (original_filename = ? OR encrypted_filename = ?)
-        ''', (temp_token, 
-              (datetime.now() + timedelta(minutes=15)).isoformat(),
-              session['user_id'], 
-              filename, 
-              f'encrypted_{filename}'))
-        conn.commit()
-        conn.close()
-
-        # Use the configured external URL with the temporary token
-        download_url = f"{Config.EXTERNAL_URL}/secure-bundle/{temp_token}"
-        
-        # Generate QR code with error correction
-        qr = qrcode.QRCode(
-            version=1,
-            error_correction=qrcode.constants.ERROR_CORRECT_H,
-            box_size=10,
-            border=4,
-        )
-        qr.add_data(download_url)
-        qr.make(fit=True)
-        
-        qr_img = qr.make_image(fill_color="black", back_color="white")
-        
-        # Save to buffer
-        buffer = io.BytesIO()
-        qr_img.save(buffer, format="PNG", optimize=True, quality=95)
-        buffer.seek(0)
-        
-        # Cache control headers for better performance
-        response = send_file(buffer, mimetype='image/png')
-        response.headers['Cache-Control'] = 'public, max-age=300'  # Cache for 5 minutes
-        return response
-        
-    except Exception as e:
-        return jsonify({
-            'error': 'QR generation failed',
-            'message': str(e)
-        }), 500
-
-@app.route('/secure-bundle/<token>')
-def secure_bundle_access(token):
-    # Validate the temporary access token
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute('''
-        SELECT original_filename, token_expiry 
-        FROM videos 
-        WHERE temp_access_token = ?
-    ''', (token,))
-    result = cursor.fetchone()
-    conn.close()
-
-    if not result or datetime.now() > datetime.fromisoformat(result[1]):
-        return jsonify({
-            'error': 'Invalid or expired token',
-            'message': 'This QR code has expired. Please generate a new one.'
-        }), 401
-
-    filename = result[0]
-    return download_key_bundle(filename)
 
 @app.route('/key/<filename>')
 def download_key_file(filename):
