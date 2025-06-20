@@ -1,34 +1,42 @@
-from flask import Flask, render_template, request, redirect, url_for, session, flash, send_file, jsonify
-from werkzeug.security import generate_password_hash, check_password_hash
-from werkzeug.utils import secure_filename
-import sqlite3
-import os
-import hashlib
-from Crypto.Cipher import AES as CryptoAES
-from Crypto.Random import get_random_bytes
-from Crypto.Util.Padding import pad, unpad
-import base64
-from flask import send_from_directory
-import secrets
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import Mail as SendGridMail, Content
-from dotenv import load_dotenv
-from datetime import datetime, timedelta
-import random
-import time
-import psutil
-from models.performance_metrics import init_performance_db, save_metrics, get_performance_stats
+# Flask and its extensions
+from flask import (
+    Flask, render_template, request, redirect, url_for, 
+    session, flash, jsonify, send_from_directory
+)
 from flask_talisman import Talisman
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-from utils.security import login_required, verify_user_access, hash_password, verify_password, log_security_event, validate_file_upload, validate_email, validate_password
-from config import Config
-import json
 from flask_mail import Mail as FlaskMail, Message
 from flask_wtf import CSRFProtect
+
+# Standard library imports
+import os
+import sqlite3
+import hashlib
+import base64
+import secrets
+import random
+import time
+from datetime import datetime, timedelta
+
+# Third-party packages
+from werkzeug.utils import secure_filename
+from Crypto.Cipher import AES as CryptoAES
+from Crypto.Random import get_random_bytes
+from Crypto.Util.Padding import pad, unpad
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail as SendGridMail, Content
+from dotenv import load_dotenv
+import psutil
 import bcrypt
 
-# 🔐 Import encryption modules (ensure AES.py and ECC.py are in crypto_module folder)
+# Local modules
+from models.performance_metrics import init_performance_db, save_metrics, get_performance_stats
+from utils.security import (
+    verify_password, log_security_event, validate_file_upload, 
+    validate_email, validate_password
+)
+from config import Config
 from crypto_module.ECC_module.ECC import ECC
 #from crypto_module.AES_module import AES
 
@@ -54,6 +62,9 @@ limiter = Limiter(
 # Initialize Flask-Mail
 mail = FlaskMail(app)
 
+# Initialize CSRF protection
+csrf = CSRFProtect(app)
+
 # File upload settings
 UPLOAD_FOLDER = Config.UPLOAD_FOLDER
 ENCRYPTED_FOLDER = Config.ENCRYPTED_FOLDER
@@ -71,9 +82,6 @@ app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USERNAME'] = Config.MAIL_USERNAME
 app.config['MAIL_PASSWORD'] = Config.MAIL_PASSWORD
 app.config['MAIL_DEFAULT_SENDER'] = Config.MAIL_DEFAULT_SENDER
-
-# Initialize CSRF protection
-csrf = CSRFProtect(app)
 
 # Ensure the database directory exists before any DB connection
 os.makedirs(os.path.dirname(Config.DATABASE_PATH), exist_ok=True)
@@ -144,7 +152,7 @@ app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
 app.config['MAIL_USERNAME'] = 'afeefahzaini@gmail.com'
 app.config['MAIL_PASSWORD'] = 'ukyj fegz ujei epcb'  # The 16-char app password
-app.config['MAIL_DEFAULT_SENDER'] = 'your_gmail_address@gmail.com'
+app.config['MAIL_DEFAULT_SENDER'] = 'afeefahzaini@gmail.com'
 
 mail = FlaskMail(app)
 
@@ -236,11 +244,11 @@ def login():
             else:
                 failed_attempts = user['failed_login_attempts'] + 1
                 if failed_attempts >= 5:
-                    lock_until = datetime.now() + timedelta(minutes=15)
+                    lock_until = datetime.now() + timedelta(minutes=2)
                     conn.execute('UPDATE users SET failed_login_attempts = ?, account_locked_until = ? WHERE id = ?',
                                (failed_attempts, lock_until.isoformat(), user['id']))
                     log_security_event('account_locked', f"Account locked for {email} due to multiple failed attempts from IP {request.remote_addr}")
-                    flash('Too many failed attempts. Account locked for 15 minutes.', 'danger')
+                    flash('Too many failed attempts. Account locked for 2 minutes.', 'danger')
                 else:
                     conn.execute('UPDATE users SET failed_login_attempts = ? WHERE id = ?', (failed_attempts, user['id']))
                     log_security_event('login_failed', f"Failed login for {email} from IP {request.remote_addr}")
@@ -316,18 +324,24 @@ def upload_file():
         original_file_hash = original_sha256_hash.hexdigest()
 
         # === AES Encryption using PyCryptodome ===
+
+        # Generate random 32-byte key 
         key = get_random_bytes(32)
+        # Create AES cipher in CBC mode
         cipher = CryptoAES.new(key, CryptoAES.MODE_CBC)
+        # Get the initialization vector
         iv = cipher.iv
 
         encrypted_filename = f'encrypted_{filename}'
         encrypted_filepath = os.path.join(ENCRYPTED_FOLDER, encrypted_filename)
 
+        # Reading file 
         with open(filepath, 'rb') as fin:
             plaintext = fin.read()
-
+        # Encrypt the file
         ciphertext = cipher.encrypt(pad(plaintext, CryptoAES.block_size))
 
+        # Saving encrypted file
         with open(encrypted_filepath, 'wb') as fout:
             fout.write(iv + ciphertext)
 
@@ -436,23 +450,37 @@ def secure_access(token):
 
     # If GET, send OTP to receiver_email and show OTP form
     if request.method == 'GET':
-        otp = str(random.randint(100000, 999999))
-        now = datetime.now()
-        cursor.execute("UPDATE videos SET otp = ?, otp_generated_time = ?, otp_attempts = 0 WHERE id = ?",
-                       (otp, now, video_id))
-        conn.commit()
-        try:
-            sg = SendGridAPIClient(Config.SENDGRID_API_KEY)
-            message = SendGridMail(
-                'afeefahzaini@gmail.com',
-                receiver_email,
-                'Your OTP for Secure Access',
-                Content('text/html', f"<p>Your OTP is: <strong>{otp}</strong>. It will expire in 5 minutes.</p>")
-            )
-            sg.send(message)
-            flash("OTP sent to your email.", "info")
-        except Exception as e:
-            flash("Failed to send OTP email.", "danger")
+        # Only generate a new OTP if none exists or if expired
+        generate_new_otp = False
+        if not otp_saved or not otp_time:
+            generate_new_otp = True
+        else:
+            try:
+                otp_time_dt = datetime.strptime(otp_time, '%Y-%m-%d %H:%M:%S.%f')
+                if datetime.now() > otp_time_dt + timedelta(minutes=5):
+                    generate_new_otp = True
+            except Exception:
+                generate_new_otp = True
+        if generate_new_otp:
+            otp = str(random.randint(100000, 999999))
+            now = datetime.now()
+            cursor.execute("UPDATE videos SET otp = ?, otp_generated_time = ?, otp_attempts = 0 WHERE id = ?",
+                           (otp, now, video_id))
+            conn.commit()
+            otp_saved = otp
+            otp_time = now
+            try:
+                sg = SendGridAPIClient(Config.SENDGRID_API_KEY)
+                message = SendGridMail(
+                    'noreply@securevideo.site',
+                    receiver_email,
+                    'Your OTP for Secure Access',
+                    Content('text/html', f"<p>Your OTP is: <strong>{otp}</strong>. It will expire in 5 minutes.</p>")
+                )
+                sg.send(message)
+                flash("OTP sent to your email.", "info")
+            except Exception as e:
+                flash("Failed to send OTP email.", "danger")
         conn.close()
         return render_template("verify_otp.html", token=token, recipient_email=receiver_email)
 
@@ -467,7 +495,7 @@ def secure_access(token):
             try:
                 sg = SendGridAPIClient(Config.SENDGRID_API_KEY)
                 message = SendGridMail(
-                    'afeefahzaini@gmail.com',
+                    'noreply@securevideo.site',
                     receiver_email,
                     'Your new OTP for Secure Access',
                     Content('text/html', f"<p>Your new OTP is: <strong>{otp}</strong>. It will expire in 5 minutes.</p>")
@@ -480,17 +508,6 @@ def secure_access(token):
             return render_template("verify_otp.html", token=token, recipient_email=receiver_email)
         elif 'otp' in request.form:
             entered_otp = request.form['otp']
-            # Re-fetch the latest OTP and related fields from the database
-            cursor.execute('''
-                SELECT otp, otp_generated_time, otp_attempts, receiver_email, id, encrypted_filename
-                FROM videos WHERE share_token = ?
-            ''', (token,))
-            row = cursor.fetchone()
-            if not row:
-                flash("Invalid or expired link.", "danger")
-                return render_template("verify_otp.html", token=token)
-            otp_saved, otp_time, attempts, receiver_email, video_id, encrypted_filename = row
-
             if not otp_saved or not otp_time:
                 flash("OTP not generated yet.", "danger")
                 return render_template("verify_otp.html", token=token, recipient_email=receiver_email)
@@ -501,6 +518,9 @@ def secure_access(token):
             if attempts >= 5:
                 flash("Too many incorrect attempts. Try resending OTP.", "danger")
                 return render_template("verify_otp.html", token=token, recipient_email=receiver_email)
+            print("row:", row)
+            print("otp_saved:", otp_saved)
+            print("entered_otp:", entered_otp)
             if entered_otp == otp_saved:
                 cursor.execute("UPDATE videos SET otp_attempts = 0 WHERE id = ?", (video_id,))
                 conn.commit()
@@ -545,7 +565,7 @@ def share_video(video_id):
 
     # Send via SendGrid
     message = SendGridMail(
-        'afeefahzaini@gmail.com',
+        'noreply@securevideo.site',
         recipient_email,
         'You have received a secure encrypted video',
         Content('text/html', f"""
@@ -562,7 +582,7 @@ def share_video(video_id):
         log_security_event('share_video', f"User {session.get('user_name')} (ID: {session.get('user_id')}) shared video ID {video_id} with {recipient_email}")
         flash("Secure share link sent successfully.", "success")
     except Exception as e:
-        print("SendGrid error:", e.body if hasattr(e, 'body') else str(e))  # << this line logs actual error
+        print("SendGrid error:", e.body if hasattr(e, 'body') else str(e))
         flash("Failed to send email. Check API key or logs.", "danger")
 
     return redirect(url_for('dashboard'))
@@ -591,6 +611,8 @@ def decrypt():
 
         try:
             filename = secure_filename(encrypted_file.filename)
+            if filename.endswith('.bak'):
+                filename = filename[:-4]  # Remove .bak extension
             base_filename = filename.replace('encrypted_', '')
             
             conn = get_db()
@@ -611,8 +633,21 @@ def decrypt():
             C1 = (int(encrypted_key_parts[0]), int(encrypted_key_parts[1]))
             C2 = int(encrypted_key_parts[2])
 
+            # Fetch the expected private key from the database
+            conn = get_db()
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT private_key FROM videos WHERE original_filename = ? OR encrypted_filename = ?
+            ''', (base_filename, filename))
+            key_result = cursor.fetchone()
+            conn.close()
+            expected_private_key = key_result[0] if key_result else None
+            print("Expected private key:", expected_private_key)
+
             ecc = ECC()
             try:
+                print("Entered private key:", private_key)
+                print("Expected private key:", expected_private_key)
                 aes_key_str = ecc.decryption(C1, C2, int(private_key))
                 aes_key = base64.b64decode(aes_key_str)
             except Exception as e:

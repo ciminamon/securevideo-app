@@ -1,5 +1,6 @@
 import os
 from datetime import timedelta
+from sendgrid.helpers.mail import Mail as SendGridMail, Content
 
 class Config:
     # Flask settings
@@ -44,7 +45,7 @@ class Config:
     SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY')
     
     # External URL for email links
-    EXTERNAL_URL = os.getenv('EXTERNAL_URL', 'https://securevideo-app.onrender.com')
+    EXTERNAL_URL = os.getenv('EXTERNAL_URL', ' https://801016cded2a.ngrok.app')
     
     # File storage paths
     UPLOAD_FOLDER = os.getenv('UPLOAD_FOLDER', 'static/uploads')

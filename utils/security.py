@@ -6,7 +6,6 @@ from flask import session, redirect, url_for, flash, request
 import logging
 from datetime import datetime
 import bcrypt
-from werkzeug.security import generate_password_hash, check_password_hash
 import sqlite3
 from config import Config
 import mimetypes
